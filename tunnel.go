@@ -3,37 +3,75 @@ package ngrokbridge
 import (
 	"crypto/tls"
 	"errors"
-	"net/http"
+	"io/ioutil"
+	"net"
 	"strings"
+	"time"
 )
-
 
 var tunnels = map[string]*Tunnel{}
 
 type Tunnel struct {
 	Schema string
 	Host   string
-	Client *http.Client
+	CC     chan net.Conn
 }
 
-func MakeTunnel(configFile string) {
+func (t *Tunnel) newConn() (net.Conn, error){
+	conn, err := net.DialTimeout("tcp", t.Host, time.Second*3)
+	if err != nil {
+		return nil, err
+	}
 
+	if t.Schema == "https" {
+		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	}
+
+	return conn, nil
+}
+
+//go routine, make connections pool
+func (t *Tunnel) poolConn() {
+	c, err := t.newConn()
+	if err == nil {
+		t.CC <- c
+	}
+}
+
+func (t *Tunnel) GetProxy() (net.Conn, error) {
+	var (
+		c net.Conn
+		err error
+	)
+	select {
+	case c = <- t.CC:
+		go t.poolConn()
+		return c, nil
+	default:
+		c, err = t.newConn()
+		go t.poolConn()
+		return c, err
+	}
+}
+
+func MakeTunnel(configFile string) error {
+	ioutil.ReadFile(configFile)
+	//To be implemented
+	return nil
 }
 
 func RegisterTunnel(schema, host string, paths []string) {
-	var client *http.Client
-	if schema == "http" {
-		client = &http.Client{}
-	} else if schema == "https"{
-		tp := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	if !strings.Contains(host, ":") {
+		if schema == "http" {
+			host += ":80"
+		} else if schema == "https"{
+			host += ":443"
+		} else {
+			panic("invalid schema")
 		}
-		client = &http.Client{Transport:tp}
-	} else {
-		panic("invalid schema")
 	}
 
-	tunnel := &Tunnel{schema, host, client}
+	tunnel := &Tunnel{schema, host, make(chan net.Conn)}
 	for _, t := range paths {
 		if _, ok := tunnels[t]; ok {
 			panic("tunnel name conflict : " + t)

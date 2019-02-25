@@ -2,10 +2,11 @@ package ngrokbridge
 
 import (
 	"bufio"
-	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -25,38 +26,46 @@ func StartTcpServer(addr string, serveHandler func(net.Conn)) error {
 	}
 }
 
-func ReadRequest(c net.Conn) (*http.Request, error) {
-	r := bufio.NewReader(c)
-	c.SetReadDeadline(time.Now().Add(time.Second * 3))
-	return http.ReadRequest(r)
-}
-
 func Start(addr string) {
 	StartTcpServer(addr, func(conn net.Conn) {
 		defer conn.Close()
-		for {
-			request, err := ReadRequest(conn)
-			if err != nil {
-				break
-			}
-
-			tunnel, err := GetTunnel(request.URL.Path)
-			if err != nil {
-				break
-			}
-			url := fmt.Sprintf("%s://%s%s", tunnel.Schema, tunnel.Host, request.RequestURI)
-			newReq, err := http.NewRequest(request.Method, url, request.Body)
-			newReq.Header = make(http.Header)
-			for h, val := range request.Header {
-				newReq.Header[h] = val
-			}
-
-			resp, err := tunnel.Client.Do(newReq)
-			if err != nil {
-				break
-			}
-			resp.Write(conn)
-			resp.Body.Close()
+		//Wrap the conn with TeeReader
+		c, r := NewConn(conn)
+		c.SetReadDeadline(time.Now().Add(time.Second * 2))
+		request, err := http.ReadRequest(bufio.NewReader(r))
+		if err != nil {
+			return
 		}
+		request.Body.Close()
+
+		tunnel, err := GetTunnel(request.URL.Path)
+		if err != nil {
+			return
+		}
+		cServer, err := tunnel.GetProxy()
+		if err != nil {
+			return
+		}
+
+		c.SetDeadline(time.Time{})
+		Join(cServer, c)
 	})
+}
+
+//Copy data between two conn in full duplex mode,
+//and quit once a conn occur an error
+func Join(c, c2 net.Conn) {
+	var wait sync.WaitGroup
+
+	pipe := func(to, from net.Conn) {
+		defer to.Close()
+		defer from.Close()
+		defer wait.Done()
+		io.Copy(to, from)
+	}
+
+	wait.Add(2)
+	go pipe(c, c2)
+	go pipe(c2, c)
+	wait.Wait()
 }
