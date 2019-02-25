@@ -11,7 +11,10 @@ import (
 
 var tunnels = map[string]*Tunnel{}
 var httpClient = &http.Client{}
-var tlsClient  = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+var tlsClient  = &http.Client{
+	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+}
+
 type Tunnel struct {
 	Schema string
 	Host   string
