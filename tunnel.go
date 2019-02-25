@@ -14,7 +14,6 @@ var tunnels = map[string]*Tunnel{}
 type Tunnel struct {
 	Schema string
 	Host   string
-	CC     chan net.Conn
 }
 
 func (t *Tunnel) newConn() (net.Conn, error){
@@ -30,28 +29,8 @@ func (t *Tunnel) newConn() (net.Conn, error){
 	return conn, nil
 }
 
-//go routine, make connections pool
-func (t *Tunnel) poolConn() {
-	c, err := t.newConn()
-	if err == nil {
-		t.CC <- c
-	}
-}
-
 func (t *Tunnel) GetProxy() (net.Conn, error) {
-	var (
-		c net.Conn
-		err error
-	)
-	select {
-	case c = <- t.CC:
-		go t.poolConn()
-		return c, nil
-	default:
-		c, err = t.newConn()
-		go t.poolConn()
-		return c, err
-	}
+	return t.newConn()
 }
 
 func MakeTunnel(configFile string) error {
@@ -71,7 +50,7 @@ func RegisterTunnel(schema, host string, paths []string) {
 		}
 	}
 
-	tunnel := &Tunnel{schema, host, make(chan net.Conn)}
+	tunnel := &Tunnel{schema, host}
 	for _, t := range paths {
 		if _, ok := tunnels[t]; ok {
 			panic("tunnel name conflict : " + t)
