@@ -27,7 +27,7 @@ func StartTcpServer(addr string, serveHandler func(net.Conn)) error {
 
 func ReadRequest(c net.Conn) (*http.Request, error) {
 	r := bufio.NewReader(c)
-	c.SetReadDeadline(time.Now().Add(time.Second * 3))
+	c.SetReadDeadline(time.Now().Add(time.Second * 2))
 	return http.ReadRequest(r)
 }
 

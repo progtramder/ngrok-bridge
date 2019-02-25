@@ -3,32 +3,34 @@ package ngrokbridge
 import (
 	"crypto/tls"
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"strings"
 )
 
 
 var tunnels = map[string]*Tunnel{}
-
+var httpClient = &http.Client{}
+var tlsClient  = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 type Tunnel struct {
 	Schema string
 	Host   string
 	Client *http.Client
 }
 
-func MakeTunnel(configFile string) {
+func MakeTunnel(configFile string) error {
 
+	ioutil.ReadFile(configFile)
+	//To be implemented
+	return nil
 }
 
 func RegisterTunnel(schema, host string, paths []string) {
 	var client *http.Client
 	if schema == "http" {
-		client = &http.Client{}
+		client = httpClient
 	} else if schema == "https"{
-		tp := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		client = &http.Client{Transport:tp}
+		client = tlsClient
 	} else {
 		panic("invalid schema")
 	}
