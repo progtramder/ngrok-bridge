@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"time"
 )
 
 func StartTcpServer(addr string, serveHandler func(net.Conn)) error {
@@ -27,7 +26,6 @@ func StartTcpServer(addr string, serveHandler func(net.Conn)) error {
 
 func ReadRequest(c net.Conn) (*http.Request, error) {
 	r := bufio.NewReader(c)
-	c.SetReadDeadline(time.Now().Add(time.Second * 2))
 	return http.ReadRequest(r)
 }
 
@@ -55,7 +53,9 @@ func Start(addr string) {
 			if err != nil {
 				break
 			}
-			resp.Write(conn)
+			if err := resp.Write(conn); err != nil {
+				break
+			}
 			resp.Body.Close()
 		}
 	})
