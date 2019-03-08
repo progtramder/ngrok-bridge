@@ -3,6 +3,7 @@ package ngrokbridge
 import (
 	"crypto/tls"
 	"errors"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
 	"strings"
@@ -34,8 +35,29 @@ func (t *Tunnel) GetProxy() (net.Conn, error) {
 }
 
 func MakeTunnel(configFile string) error {
-	ioutil.ReadFile(configFile)
-	//To be implemented
+	type tun struct {
+		Schema string   `yaml:"schema"`
+		Host   string   `yaml:"host"`
+		Path   []string `yaml:"path"`
+	}
+
+	router := struct {
+		Router []tun `yaml:"router"`
+	}{}
+
+	setting, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		return err
+	}
+	err = yaml.Unmarshal(setting, &router)
+	if err != nil {
+		return err
+	}
+
+	for _, tun := range router.Router {
+		RegisterTunnel(tun.Schema, tun.Host, tun.Path)
+	}
+
 	return nil
 }
 
@@ -53,7 +75,7 @@ func RegisterTunnel(schema, host string, paths []string) {
 	tunnel := &Tunnel{schema, host}
 	for _, t := range paths {
 		if _, ok := tunnels[t]; ok {
-			panic("tunnel name conflict : " + t)
+			panic("tunnel path conflict : " + t)
 		}
 		tunnels[t] = tunnel
 	}
@@ -65,11 +87,25 @@ func GetTunnel(path string) (*Tunnel, error) {
 		return t, nil
 	}
 
-	for k, v := range tunnels {
-		if strings.Contains(path, k) {
-			t = v
-			return t, nil
+	var (
+		index = -1
+		key string
+	)
+
+	//find best match. for path=/service/sub/test, registered path /service/sub
+	//is better than /service and even better than /, that means the math index
+	// the higher the better
+	for k := range tunnels {
+		i := strings.Index(path, k)
+		if i > index {
+			index = i
+			key = k
 		}
 	}
-	return nil, errors.New("tunnel not found : " + path)
+
+	if index == -1 {
+		return nil, errors.New("tunnel not found : " + path)
+	}
+
+	return tunnels[key], nil
 }
