@@ -2,10 +2,11 @@ package ngrokbridge
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -35,18 +36,37 @@ func StartTcpServer(addr string, serveHandler TcpHandler) error {
 	}
 }
 
+//Peek the request path
+func readPath(r *bufio.Reader) ([]byte, error) {
+	b, _, err := r.ReadLine()
+	if err != nil {
+		return nil, err
+	}
+
+	i := bytes.Index(b, []byte("/"))
+	if i == -1 {
+		return nil, errors.New("malformed http request")
+	}
+
+	for j := i + 1; j < len(b); j++ {
+		if b[j] == '?' || b[j] == ' ' {
+			return b[i : j], nil
+		}
+	}
+
+	return nil, errors.New("malformed http request")
+}
+
 func handler(conn net.Conn) {
 	defer conn.Close()
 	//Wrap the conn with TeeReader
 	c, r := NewConn(conn)
 	c.SetReadDeadline(time.Now().Add(time.Second * 2))
-	request, err := http.ReadRequest(bufio.NewReader(r))
+	path, err := readPath(bufio.NewReader(r))
 	if err != nil {
 		return
 	}
-	request.Body.Close()
-
-	tunnel, err := GetTunnel(request.URL.Path)
+	tunnel, err := GetTunnel(string(path))
 	if err != nil {
 		return
 	}

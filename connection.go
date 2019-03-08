@@ -11,8 +11,8 @@ const (
 )
 
 type Conn struct {
-	net.Conn               // the raw connection
-	buf *bytes.Buffer // all of the initial data that has to be read in order to vhost a connection is saved here
+	net.Conn
+	buf *bytes.Buffer
 }
 
 func NewConn(conn net.Conn) (*Conn, io.Reader) {
